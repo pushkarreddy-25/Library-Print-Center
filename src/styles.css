@@ -518,6 +518,58 @@ body::after {
 	font-size: 11px;
 }
 
+.queue-controls {
+	position: relative;
+}
+
+.filter-menu {
+	position: absolute;
+	top: 43px;
+	right: 0;
+	z-index: 5;
+	min-width: 125px;
+	display: grid;
+	padding: 6px;
+	border: 1px solid rgba(255, 255, 255, .8);
+	border-radius: 12px;
+	background: rgba(250, 254, 252, .94);
+	box-shadow: 0 15px 35px rgba(29, 67, 56, .16);
+	backdrop-filter: blur(20px);
+	-webkit-backdrop-filter: blur(20px);
+}
+
+.filter-menu button,
+.operator-profile-panel button {
+	border: 0;
+	padding: 8px 9px;
+	text-align: left;
+	border-radius: 7px;
+	background: transparent;
+	color: var(--muted);
+	font-size: 11px;
+}
+
+.filter-menu button:hover,
+.operator-profile-panel button:hover {
+	background: rgba(207, 239, 224, .7);
+	color: var(--green);
+}
+
+.operator-profile-panel {
+	display: grid;
+	gap: 6px;
+	color: var(--muted);
+}
+
+.operator-profile-panel strong {
+	color: var(--ink);
+}
+
+.operator-profile-panel button {
+	margin-top: 5px;
+	color: var(--red);
+}
+
 .selected-printer-note {
 	display: flex;
 	align-items: center;
