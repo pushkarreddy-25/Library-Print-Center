@@ -234,10 +234,14 @@ body::after {
 .quick-stats {
 	border-radius: 20px;
 	overflow: hidden;
+	min-height: 80px;
+	padding: 16px 0;
+	align-items: center;
 }
 
 .quick-stats > div {
 	background: rgba(255, 255, 255, .16);
+	justify-content: center;
 }
 
 .form-panel,
@@ -431,6 +435,111 @@ body::after {
 	backdrop-filter: blur(18px);
 	-webkit-backdrop-filter: blur(18px);
 	box-shadow: 0 15px 35px rgba(26, 61, 50, .2);
+}
+
+.notification-wrap,
+.notification-button {
+	position: relative;
+}
+
+.notification-badge {
+	position: absolute;
+	top: -2px;
+	right: -2px;
+	min-width: 15px;
+	height: 15px;
+	display: grid;
+	place-items: center;
+	padding: 0 4px;
+	border-radius: 999px;
+	background: #b8534b;
+	color: #fff;
+	font-size: 9px;
+	font-weight: 700;
+}
+
+.notification-panel {
+	position: absolute;
+	top: 43px;
+	right: 0;
+	z-index: 6;
+	width: 250px;
+	display: grid;
+	gap: 10px;
+	padding: 14px;
+	border: 1px solid rgba(255, 255, 255, .8);
+	border-radius: 14px;
+	background: rgba(250, 254, 252, .9);
+	box-shadow: 0 18px 45px rgba(29, 67, 56, .16);
+	backdrop-filter: blur(24px) saturate(140%);
+	-webkit-backdrop-filter: blur(24px) saturate(140%);
+	font-size: 11px;
+}
+
+.notification-item {
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+	color: var(--muted);
+	line-height: 1.35;
+}
+
+.notification-dot {
+	width: 6px;
+	height: 6px;
+	flex: 0 0 auto;
+	margin-top: 4px;
+	border-radius: 50%;
+	background: var(--green);
+}
+
+.notification-empty {
+	color: var(--muted);
+}
+
+.printer-select {
+	height: 36px;
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	padding: 0 10px;
+	border: 1px solid var(--line);
+	border-radius: 5px;
+	background: #fffefa;
+	color: var(--muted);
+}
+
+.printer-select select {
+	max-width: 180px;
+	border: 0;
+	outline: 0;
+	background: transparent;
+	color: var(--ink);
+	font-size: 11px;
+}
+
+.selected-printer-note {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	margin: -7px 0 14px;
+	color: var(--muted);
+	font-size: 10px;
+}
+
+.selected-printer-note strong {
+	color: var(--ink);
+}
+
+.offline-dot {
+	background: #b7c0bb !important;
+	box-shadow: none !important;
+}
+
+.print-button:disabled {
+	opacity: .45;
+	cursor: not-allowed;
+	transform: none;
 }
 
 @media (max-width: 620px) {

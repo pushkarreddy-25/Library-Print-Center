@@ -33,6 +33,8 @@ The first implementation should expose these authenticated agent operations thro
 - `POST /agent/jobs/:id/fail`
 - `GET /agent/printers`
 
+The operator dashboard sends `{ "printer_id": "<printer UUID>" }` to the start endpoint. The agent must validate that printer, update its `public.printers.status` and `last_seen_at` heartbeat fields, and update the job to `printing`, `completed`, or `failed`; the browser no longer marks a job completed by itself.
+
 The agent must receive a signed download URL only after claiming a job. Signed URLs should expire quickly and must not be rendered in the student or operator UI.
 
 ## Required deployment values

@@ -151,6 +151,12 @@ begin
   ) then
     alter publication supabase_realtime add table public.print_jobs;
   end if;
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'printers'
+  ) then
+    alter publication supabase_realtime add table public.printers;
+  end if;
 end;
 $$;
 

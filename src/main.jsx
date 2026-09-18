@@ -27,7 +27,7 @@ import {
 } from 'lucide-react';
 import './styles.css';
 import { supabase, supabaseConfigError } from './lib/supabase';
-import { createPrintJob, getCurrentAccount, getJobs, signOut, subscribeToJobs, updateJobStatus } from './lib/printCenterApi';
+import { createPrintJob, getCurrentAccount, getJobs, getPrinters, signOut, startPrintJob, subscribeToJobs, subscribeToPrinters } from './lib/printCenterApi';
 
 const initialJobs = [
   { id: 1, name: 'research-outline.pdf', pages: 12, copies: 2, color: 'B&W', status: 'Waiting', submitted: '2 min ago', size: '2.4 MB', type: 'PDF' },
@@ -42,9 +42,13 @@ function App() {
   const [loadingAccount, setLoadingAccount] = useState(true);
   const [studentMode, setStudentMode] = useState('dashboard');
   const [jobs, setJobs] = useState(initialJobs);
+  const [printers, setPrinters] = useState([]);
+  const [selectedPrinterId, setSelectedPrinterId] = useState('');
   const [search, setSearch] = useState('');
   const [toast, setToast] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
 
   useEffect(() => {
     if (supabaseConfigError) {
@@ -59,6 +63,8 @@ function App() {
         if (mounted) {
           setAccount(null);
           setJobs([]);
+          setPrinters([]);
+          setSelectedPrinterId('');
           setLoadingAccount(false);
         }
         return;
@@ -107,6 +113,7 @@ function App() {
         try {
           const remoteJobs = await getJobs({ accountId: account.id, staff: account.role !== 'student' });
           setJobs(remoteJobs.map(mapRemoteJob));
+          notify('Print queue updated.');
         } catch (error) {
           notify(`Live queue update failed: ${error.message}`);
         }
@@ -115,8 +122,28 @@ function App() {
     return () => { supabase.removeChannel(channel); };
   }, [session, account]);
 
+  useEffect(() => {
+    if (!session || !account || account.role === 'student') return undefined;
+    let mounted = true;
+    const loadPrinters = async () => {
+      try {
+        const remotePrinters = await getPrinters();
+        if (mounted) {
+          setPrinters(remotePrinters);
+          setSelectedPrinterId((current) => remotePrinters.some((printer) => printer.id === current) ? current : remotePrinters.find((printer) => printer.status === 'online')?.id || '');
+        }
+      } catch (error) {
+        if (mounted) notify(`Printer status unavailable: ${error.message}`);
+      }
+    };
+    loadPrinters();
+    const channel = subscribeToPrinters({ onChange: loadPrinters });
+    return () => { mounted = false; supabase.removeChannel(channel); };
+  }, [session, account]);
+
   const notify = (message) => {
     setToast(message);
+    setNotifications((current) => [{ id: crypto.randomUUID(), message, createdAt: new Date() }, ...current].slice(0, 8));
     window.setTimeout(() => setToast(''), 3000);
   };
 
@@ -136,13 +163,16 @@ function App() {
     }
   };
 
-  const completeJob = async (id) => {
+  const printJob = async (id) => {
+    if (!selectedPrinterId) {
+      notify('Select an online printer before printing.');
+      return;
+    }
     try {
-      const updated = await updateJobStatus(id, 'completed');
-      setJobs((current) => current.map((job) => job.id === id ? mapRemoteJob(updated) : job));
-      notify('Job marked as completed');
+      await startPrintJob(id, selectedPrinterId);
+      notify('Print request sent to the selected printer.');
     } catch (error) {
-      notify(`Could not complete job: ${error.message}`);
+      notify(`Could not start printing: ${error.message}`);
     }
   };
 
@@ -153,7 +183,7 @@ function App() {
   const isStaff = account.role === 'operator' || account.role === 'admin';
   if (isStaff) {
     return <>
-      <OperatorArea account={account} jobs={jobs} search={search} setSearch={setSearch} onComplete={completeJob} onSignOut={() => signOut().catch((error) => notify(error.message))} notify={notify} />
+      <OperatorArea account={account} jobs={jobs} printers={printers} selectedPrinterId={selectedPrinterId} setSelectedPrinterId={setSelectedPrinterId} search={search} setSearch={setSearch} onPrint={printJob} onSignOut={() => signOut().catch((error) => notify(error.message))} notifications={notifications} notificationsOpen={notificationsOpen} setNotificationsOpen={setNotificationsOpen} notify={notify} />
       {toast && <div className="toast"><span className="toast-icon"><Check size={15} /></span>{toast}</div>}
     </>;
   }
@@ -165,7 +195,7 @@ function App() {
         <span>Library <strong>Print Center</strong></span>
       </button>
       <div className="topbar-right">
-        <button className="icon-button" aria-label="Notifications"><Bell size={18} /></button>
+        <div className="notification-wrap"><button className="icon-button notification-button" aria-label="Notifications" onClick={() => setNotificationsOpen(!notificationsOpen)}><Bell size={18} />{notifications.length > 0 && <span className="notification-badge">{notifications.length}</span>}</button>{notificationsOpen && <NotificationPanel notifications={notifications} />}</div>
         <button className="avatar" aria-label="Open profile menu" onClick={() => setMenuOpen(!menuOpen)}>PS</button>
         {menuOpen && <div className="profile-menu"><strong>{account.name}</strong><span>{account.role} account</span><button onClick={() => signOut().catch((error) => notify(error.message))}>Sign out</button></div>}
       </div>
@@ -460,9 +490,29 @@ function SendIcon() { return <ArrowUpRight size={17} />; }
 
 function History({ jobs }) { return <><div className="page-heading compact"><div><p className="eyebrow">Your activity</p><h1>Print history</h1><p className="subheading">A record of your past requests. Files are removed after printing.</p></div><Filter size={19} /></div><div className="history-table"><div className="history-head"><span>Document</span><span>Details</span><span>Date</span><span>Status</span></div>{jobs.map((job) => <div className="history-row" key={job.id}><div className="history-doc"><div className="file-icon"><FileText size={18} /></div><strong>{job.name}</strong></div><span>{job.pages} pages · {job.color}</span><span>{job.submitted}</span><span className={`status-pill ${job.status === 'Completed' ? 'completed' : 'waiting'}`}><span /> {job.status}</span></div>)}</div></>; }
 
-function OperatorArea({ account, jobs, search, setSearch, onComplete, onSignOut, notify }) {
+function OperatorArea({ account, jobs, printers, selectedPrinterId, setSelectedPrinterId, search, setSearch, onPrint, onSignOut, notifications, notificationsOpen, setNotificationsOpen, notify }) {
   const filteredJobs = jobs.filter((job) => job.status === 'Waiting' && (!search || [job.name, job.studentName, job.printCode].filter(Boolean).some((value) => value.toLowerCase().includes(search.toLowerCase()))));
-  return <div className="operator-page"><aside className="operator-sidebar"><div className="operator-brand"><span className="brand-mark"><BookOpen size={18} /></span><div><strong>Print desk</strong><span>Operator workspace</span></div></div><div className="operator-nav"><button className="operator-nav-active"><LayoutDashboard size={17} /> Queue <b>{jobs.filter((job) => job.status === 'Waiting').length}</b></button><button><Printer size={17} /> Printers <span className="online-dot" /></button><button><Clipboard size={17} /> Activity</button></div><div className="operator-footer"><span className="online-dot" /> Printer connected<button><Settings size={17} /> Settings</button><button onClick={onSignOut}>Sign out</button></div></aside><main className="operator-main"><div className="operator-heading"><div><p className="eyebrow">Operator workspace / Today</p><h1>Good morning, {account.name}</h1><p className="subheading">Keep the queue moving.</p></div><div className="operator-actions"><button className="icon-button"><Bell size={18} /></button><button className="operator-avatar" aria-label="Operator account">{account.name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</button></div></div><div className="queue-stats"><div><span>Waiting to print</span><strong>{jobs.filter((job) => job.status === 'Waiting').length}</strong></div><div><span>Pages in queue</span><strong>{jobs.filter((job) => job.status === 'Waiting').reduce((total, job) => total + job.pages * job.copies, 0)}</strong></div><div><span>Completed today</span><strong>{jobs.filter((job) => job.status === 'Completed').length + 14}</strong></div><div><span>Printer status</span><strong className="printer-status"><span className="online-dot" /> Online</strong></div></div><section className="queue-section"><div className="queue-toolbar"><div><h2>Print queue</h2><span>Requests are ordered by arrival time</span></div><div className="queue-controls"><div className="search-field"><Search size={17} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by student or document" /><kbd>/</kbd></div><button className="filter-button"><Filter size={16} /> Filter</button></div></div><div className="operator-table"><div className="operator-table-head"><span>Student</span><span>Document</span><span>Print settings</span><span>Arrived</span><span /></div>{filteredJobs.length ? filteredJobs.map((job, index) => <div className="operator-row" key={job.id}><div className="student-cell"><div className="operator-avatar small">PS</div><div><strong>Pushkar Shah</strong><span><b>K7M4P2</b> · {index + 1} of {filteredJobs.length}</span></div></div><div className="operator-file"><FileText size={18} /><strong>{job.name}</strong></div><div><span className="setting-tag">{job.pages} pages</span><span className="setting-tag">{job.color}</span><span className="setting-tag">{job.copies} {job.copies === 1 ? 'copy' : 'copies'}</span></div><span className="arrived">{job.submitted}</span><div className="row-actions"><button className="preview-button" onClick={() => notify(`Previewing ${job.name}`)}>Preview</button><button className="print-button" onClick={() => onComplete(job.id)}><Printer size={15} /> Print</button></div></div>) : <div className="operator-empty"><Search size={22} /><strong>No matching jobs</strong><span>Try another student name, Print Code, or document.</span></div>}</div></section><div className="operator-note"><ShieldCheck size={16} /><span>Student identifiers are private. Use the permanent Print Code to verify each request at the counter.</span></div></main></div>;
+  const onlinePrinters = printers.filter((printer) => printer.status === 'online');
+  const selectedPrinter = printers.find((printer) => printer.id === selectedPrinterId);
+  const completedToday = jobs.filter((job) => job.status === 'Completed').length;
+  const initials = account.name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase();
+
+  return <div className="operator-page">
+    <aside className="operator-sidebar">
+      <div className="operator-brand"><span className="brand-mark"><BookOpen size={18} /></span><div><strong>Print desk</strong><span>Operator workspace</span></div></div>
+      <div className="operator-nav"><button className="operator-nav-active"><LayoutDashboard size={17} /> Queue <b>{jobs.filter((job) => job.status === 'Waiting').length}</b></button><button><Printer size={17} /> Printers <b>{onlinePrinters.length}</b></button><button><Clipboard size={17} /> Activity</button></div>
+      <div className="operator-footer"><span><span className={`online-dot ${onlinePrinters.length ? '' : 'offline-dot'}`} /> {onlinePrinters.length} {onlinePrinters.length === 1 ? 'printer' : 'printers'} connected</span><button><Settings size={17} /> Settings</button><button onClick={onSignOut}>Sign out</button></div>
+    </aside>
+    <main className="operator-main">
+      <div className="operator-heading"><div><p className="eyebrow">Operator workspace / Today</p><h1>Good morning, {account.name}</h1><p className="subheading">Keep the queue moving.</p></div><div className="operator-actions"><div className="notification-wrap"><button className="icon-button notification-button" aria-label="Notifications" onClick={() => setNotificationsOpen(!notificationsOpen)}><Bell size={18} />{notifications.length > 0 && <span className="notification-badge">{notifications.length}</span>}</button>{notificationsOpen && <NotificationPanel notifications={notifications} />}</div><button className="operator-avatar" aria-label="Operator account">{initials}</button></div></div>
+      <div className="queue-stats"><div><span>Waiting to print</span><strong>{jobs.filter((job) => job.status === 'Waiting').length}</strong></div><div><span>Pages in queue</span><strong>{jobs.filter((job) => job.status === 'Waiting').reduce((total, job) => total + job.pages * job.copies, 0)}</strong></div><div><span>Completed today</span><strong>{completedToday}</strong></div><div><span>Printers online</span><strong className="printer-status"><span className={`online-dot ${onlinePrinters.length ? '' : 'offline-dot'}`} /> {onlinePrinters.length}</strong></div></div>
+      <section className="queue-section"><div className="queue-toolbar"><div><h2>Print queue</h2><span>Requests are ordered by arrival time</span></div><div className="queue-controls"><label className="printer-select"><Printer size={16} /><select value={selectedPrinterId} onChange={(event) => setSelectedPrinterId(event.target.value)}><option value="">Select online printer</option>{printers.map((printer) => <option key={printer.id} value={printer.id} disabled={printer.status !== 'online'}>{printer.name} ({printer.status})</option>)}</select></label><div className="search-field"><Search size={17} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by student or document" /><kbd>/</kbd></div><button className="filter-button"><Filter size={16} /> Filter</button></div></div><div className="selected-printer-note">{selectedPrinter ? <><span className="online-dot" /> Printing to <strong>{selectedPrinter.name}</strong></> : <><span className="offline-dot" /> Select an online printer before printing</>}</div><div className="operator-table"><div className="operator-table-head"><span>Student</span><span>Document</span><span>Print settings</span><span>Arrived</span><span /></div>{filteredJobs.length ? filteredJobs.map((job, index) => <div className="operator-row" key={job.id}><div className="student-cell"><div className="operator-avatar small">{job.studentName?.slice(0, 2).toUpperCase() || 'ST'}</div><div><strong>{job.studentName || 'Student'}</strong><span><b>{job.printCode || 'No code'}</b> · {index + 1} of {filteredJobs.length}</span></div></div><div className="operator-file"><FileText size={18} /><strong>{job.name}</strong></div><div><span className="setting-tag">{job.pages} pages</span><span className="setting-tag">{job.color}</span><span className="setting-tag">{job.copies} {job.copies === 1 ? 'copy' : 'copies'}</span></div><span className="arrived">{job.submitted}</span><div className="row-actions"><button className="preview-button" onClick={() => notify(`Previewing ${job.name}`)}>Preview</button><button className="print-button" disabled={!selectedPrinterId} onClick={() => onPrint(job.id)}><Printer size={15} /> Print</button></div></div>) : <div className="operator-empty"><Search size={22} /><strong>No matching jobs</strong><span>Try another student name, Print Code, or document.</span></div>}</div></section><div className="operator-note"><ShieldCheck size={16} /><span>Printer availability comes from the Windows print agent. Jobs change to printing and completed only after the agent reports them.</span></div>
+    </main>
+  </div>;
+}
+
+function NotificationPanel({ notifications }) {
+  return <div className="notification-panel"><strong>Notifications</strong>{notifications.length ? notifications.map((notification) => <div className="notification-item" key={notification.id}><span className="notification-dot" /><span>{notification.message}</span></div>) : <span className="notification-empty">No new notifications</span>}</div>;
 }
 
 createRoot(document.getElementById('root')).render(<App />);

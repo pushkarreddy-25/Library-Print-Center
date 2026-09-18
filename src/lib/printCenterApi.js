@@ -1,5 +1,7 @@
 import { supabase, storageBucket } from './supabase';
 
+const printAgentUrl = import.meta.env.VITE_PRINT_AGENT_URL;
+
 export async function getCurrentAccount() {
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError) throw authError;
@@ -32,6 +34,42 @@ export function subscribeToJobs({ accountId, staff = false, onChange }) {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'print_jobs', ...(filter ? { filter } : {}) }, onChange)
     .subscribe();
   return channel;
+}
+
+export async function getPrinters() {
+  const { data, error } = await supabase
+    .from('printers')
+    .select('id, name, system_name, status, last_seen_at, updated_at')
+    .order('name', { ascending: true });
+  if (error) throw error;
+  return data || [];
+}
+
+export function subscribeToPrinters({ onChange }) {
+  const channel = supabase
+    .channel('printers')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'printers' }, onChange)
+    .subscribe();
+  return channel;
+}
+
+export async function startPrintJob(jobId, printerId) {
+  if (!printAgentUrl) {
+    throw new Error('The Windows print agent is not configured. Set VITE_PRINT_AGENT_URL before printing.');
+  }
+
+  const { data: { session } } = await supabase.auth.getSession();
+  const response = await fetch(`${printAgentUrl.replace(/\/$/, '')}/agent/jobs/${jobId}/start`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+    },
+    body: JSON.stringify({ printer_id: printerId }),
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(result.error || `Print agent returned ${response.status}.`);
+  return result;
 }
 
 export async function createPrintJob({ accountId, file, settings }) {
