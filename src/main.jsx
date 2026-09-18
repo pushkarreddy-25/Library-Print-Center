@@ -49,6 +49,7 @@ function App() {
 
   useEffect(() => {
     if (supabaseConfigError) {
+      setSession(null);
       setLoadingAccount(false);
       return undefined;
     }
