@@ -26,7 +26,7 @@ import {
   X,
 } from 'lucide-react';
 import './styles.css';
-import { supabase } from './lib/supabase';
+import { supabase, supabaseConfigError } from './lib/supabase';
 import { createPrintJob, getCurrentAccount, getJobs, signOut, subscribeToJobs, updateJobStatus } from './lib/printCenterApi';
 
 const initialJobs = [
@@ -48,6 +48,11 @@ function App() {
   const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
+    if (supabaseConfigError) {
+      setLoadingAccount(false);
+      return undefined;
+    }
+
     let mounted = true;
     const loadWorkspace = async (activeSession) => {
       if (!activeSession) {
@@ -143,6 +148,7 @@ function App() {
   };
 
   if (loadingAccount || session === undefined) return <div className="loading-screen"><span className="brand-mark"><BookOpen size={18} /></span><strong>Loading Print Center</strong></div>;
+  if (supabaseConfigError) return <ConfigurationScreen message={supabaseConfigError} />;
   if (!session || !account) return <AuthScreen notify={notify} initialError={accountError} />;
 
   return (
@@ -171,6 +177,10 @@ function App() {
       {toast && <div className="toast"><span className="toast-icon"><Check size={15} /></span>{toast}</div>}
     </div>
   );
+}
+
+function ConfigurationScreen({ message }) {
+  return <div className="loading-screen configuration-screen"><span className="brand-mark"><Settings size={18} /></span><strong>Print Center needs configuration</strong><p>{message}</p></div>;
 }
 
 function mapRemoteJob(job) {
