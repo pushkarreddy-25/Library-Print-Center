@@ -386,7 +386,7 @@ body::after {
 }
 
 .operator-page {
-	min-height: calc(100vh - 76px);
+	min-height: 100vh;
 }
 
 .operator-sidebar,

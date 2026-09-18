@@ -40,7 +40,6 @@ function App() {
   const [account, setAccount] = useState(null);
   const [accountError, setAccountError] = useState('');
   const [loadingAccount, setLoadingAccount] = useState(true);
-  const [view, setView] = useState('student');
   const [studentMode, setStudentMode] = useState('dashboard');
   const [jobs, setJobs] = useState(initialJobs);
   const [search, setSearch] = useState('');
@@ -75,7 +74,6 @@ function App() {
         if (mounted) {
           setAccount(currentAccount);
           setJobs(remoteJobs.map(mapRemoteJob));
-          setView(currentAccount?.role === 'student' ? 'student' : 'operator');
         }
       } catch (error) {
         const missingSchema = error.message.includes("Could not find the table 'public.profiles'") || error.message.includes('relation "public.profiles" does not exist');
@@ -152,32 +150,30 @@ function App() {
   if (supabaseConfigError) return <ConfigurationScreen message={supabaseConfigError} />;
   if (!session || !account) return <AuthScreen notify={notify} initialError={accountError} />;
 
-  return (
-    <div className="app-shell">
-      <header className="topbar">
-        <button className="brand" onClick={() => { setView('student'); setStudentMode('dashboard'); }} aria-label="Go to home">
-          <span className="brand-mark"><BookOpen size={18} strokeWidth={2.4} /></span>
-          <span>Library <strong>Print Center</strong></span>
-        </button>
-        <div className="topbar-right">
-          <button className="mode-switch" onClick={() => setView(view === 'student' ? 'operator' : 'student')}>
-            {view === 'student' ? <><ShieldCheck size={15} /> Operator view</> : <><Home size={15} /> Student view</>}
-          </button>
-          <button className="icon-button" aria-label="Notifications"><Bell size={18} /></button>
-          <button className="avatar" aria-label="Open profile menu" onClick={() => setMenuOpen(!menuOpen)}>PS</button>
-          {menuOpen && <div className="profile-menu"><strong>{account.name}</strong><span>{account.role} account</span><button onClick={() => signOut().catch((error) => notify(error.message))}>Sign out</button></div>}
-        </div>
-      </header>
-
-      {view === 'student' ? (
-        <StudentArea mode={studentMode} setMode={setStudentMode} jobs={jobs} account={account} onCopy={copyCode} onSubmit={submitJob} notify={notify} />
-      ) : (
-        <OperatorArea jobs={jobs} search={search} setSearch={setSearch} onComplete={completeJob} notify={notify} />
-      )}
-
+  const isStaff = account.role === 'operator' || account.role === 'admin';
+  if (isStaff) {
+    return <>
+      <OperatorArea account={account} jobs={jobs} search={search} setSearch={setSearch} onComplete={completeJob} onSignOut={() => signOut().catch((error) => notify(error.message))} notify={notify} />
       {toast && <div className="toast"><span className="toast-icon"><Check size={15} /></span>{toast}</div>}
-    </div>
-  );
+    </>;
+  }
+
+  return <div className="app-shell">
+    <header className="topbar">
+      <button className="brand" onClick={() => setStudentMode('dashboard')} aria-label="Go to home">
+        <span className="brand-mark"><BookOpen size={18} strokeWidth={2.4} /></span>
+        <span>Library <strong>Print Center</strong></span>
+      </button>
+      <div className="topbar-right">
+        <button className="icon-button" aria-label="Notifications"><Bell size={18} /></button>
+        <button className="avatar" aria-label="Open profile menu" onClick={() => setMenuOpen(!menuOpen)}>PS</button>
+        {menuOpen && <div className="profile-menu"><strong>{account.name}</strong><span>{account.role} account</span><button onClick={() => signOut().catch((error) => notify(error.message))}>Sign out</button></div>}
+      </div>
+    </header>
+
+    <StudentArea mode={studentMode} setMode={setStudentMode} jobs={jobs} account={account} onCopy={copyCode} onSubmit={submitJob} notify={notify} />
+    {toast && <div className="toast"><span className="toast-icon"><Check size={15} /></span>{toast}</div>}
+  </div>;
 }
 
 function ConfigurationScreen({ message }) {
@@ -464,9 +460,9 @@ function SendIcon() { return <ArrowUpRight size={17} />; }
 
 function History({ jobs }) { return <><div className="page-heading compact"><div><p className="eyebrow">Your activity</p><h1>Print history</h1><p className="subheading">A record of your past requests. Files are removed after printing.</p></div><Filter size={19} /></div><div className="history-table"><div className="history-head"><span>Document</span><span>Details</span><span>Date</span><span>Status</span></div>{jobs.map((job) => <div className="history-row" key={job.id}><div className="history-doc"><div className="file-icon"><FileText size={18} /></div><strong>{job.name}</strong></div><span>{job.pages} pages · {job.color}</span><span>{job.submitted}</span><span className={`status-pill ${job.status === 'Completed' ? 'completed' : 'waiting'}`}><span /> {job.status}</span></div>)}</div></>; }
 
-function OperatorArea({ jobs, search, setSearch, onComplete, notify }) {
+function OperatorArea({ account, jobs, search, setSearch, onComplete, onSignOut, notify }) {
   const filteredJobs = jobs.filter((job) => job.status === 'Waiting' && (!search || [job.name, job.studentName, job.printCode].filter(Boolean).some((value) => value.toLowerCase().includes(search.toLowerCase()))));
-  return <div className="operator-page"><aside className="operator-sidebar"><div className="operator-brand"><span className="brand-mark"><BookOpen size={18} /></span><div><strong>Print desk</strong><span>Operator workspace</span></div></div><div className="operator-nav"><button className="operator-nav-active"><LayoutDashboard size={17} /> Queue <b>{jobs.filter((job) => job.status === 'Waiting').length}</b></button><button><Printer size={17} /> Printers <span className="online-dot" /></button><button><Clipboard size={17} /> Activity</button></div><div className="operator-footer"><span className="online-dot" /> Printer connected<button><Settings size={17} /> Settings</button></div></aside><main className="operator-main"><div className="operator-heading"><div><p className="eyebrow">Operator workspace / Today</p><h1>Good morning, Mira</h1><p className="subheading">Keep the queue moving.</p></div><div className="operator-actions"><button className="icon-button"><Bell size={18} /></button><button className="operator-avatar">MK</button></div></div><div className="queue-stats"><div><span>Waiting to print</span><strong>{jobs.filter((job) => job.status === 'Waiting').length}</strong></div><div><span>Pages in queue</span><strong>{jobs.filter((job) => job.status === 'Waiting').reduce((total, job) => total + job.pages * job.copies, 0)}</strong></div><div><span>Completed today</span><strong>{jobs.filter((job) => job.status === 'Completed').length + 14}</strong></div><div><span>Printer status</span><strong className="printer-status"><span className="online-dot" /> Online</strong></div></div><section className="queue-section"><div className="queue-toolbar"><div><h2>Print queue</h2><span>Requests are ordered by arrival time</span></div><div className="queue-controls"><div className="search-field"><Search size={17} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by student or document" /><kbd>/</kbd></div><button className="filter-button"><Filter size={16} /> Filter</button></div></div><div className="operator-table"><div className="operator-table-head"><span>Student</span><span>Document</span><span>Print settings</span><span>Arrived</span><span /></div>{filteredJobs.length ? filteredJobs.map((job, index) => <div className="operator-row" key={job.id}><div className="student-cell"><div className="operator-avatar small">PS</div><div><strong>Pushkar Shah</strong><span><b>K7M4P2</b> · {index + 1} of {filteredJobs.length}</span></div></div><div className="operator-file"><FileText size={18} /><strong>{job.name}</strong></div><div><span className="setting-tag">{job.pages} pages</span><span className="setting-tag">{job.color}</span><span className="setting-tag">{job.copies} {job.copies === 1 ? 'copy' : 'copies'}</span></div><span className="arrived">{job.submitted}</span><div className="row-actions"><button className="preview-button" onClick={() => notify(`Previewing ${job.name}`)}>Preview</button><button className="print-button" onClick={() => onComplete(job.id)}><Printer size={15} /> Print</button></div></div>) : <div className="operator-empty"><Search size={22} /><strong>No matching jobs</strong><span>Try another student name, Print Code, or document.</span></div>}</div></section><div className="operator-note"><ShieldCheck size={16} /><span>Student identifiers are private. Use the permanent Print Code to verify each request at the counter.</span></div></main></div>;
+  return <div className="operator-page"><aside className="operator-sidebar"><div className="operator-brand"><span className="brand-mark"><BookOpen size={18} /></span><div><strong>Print desk</strong><span>Operator workspace</span></div></div><div className="operator-nav"><button className="operator-nav-active"><LayoutDashboard size={17} /> Queue <b>{jobs.filter((job) => job.status === 'Waiting').length}</b></button><button><Printer size={17} /> Printers <span className="online-dot" /></button><button><Clipboard size={17} /> Activity</button></div><div className="operator-footer"><span className="online-dot" /> Printer connected<button><Settings size={17} /> Settings</button><button onClick={onSignOut}>Sign out</button></div></aside><main className="operator-main"><div className="operator-heading"><div><p className="eyebrow">Operator workspace / Today</p><h1>Good morning, {account.name}</h1><p className="subheading">Keep the queue moving.</p></div><div className="operator-actions"><button className="icon-button"><Bell size={18} /></button><button className="operator-avatar" aria-label="Operator account">{account.name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</button></div></div><div className="queue-stats"><div><span>Waiting to print</span><strong>{jobs.filter((job) => job.status === 'Waiting').length}</strong></div><div><span>Pages in queue</span><strong>{jobs.filter((job) => job.status === 'Waiting').reduce((total, job) => total + job.pages * job.copies, 0)}</strong></div><div><span>Completed today</span><strong>{jobs.filter((job) => job.status === 'Completed').length + 14}</strong></div><div><span>Printer status</span><strong className="printer-status"><span className="online-dot" /> Online</strong></div></div><section className="queue-section"><div className="queue-toolbar"><div><h2>Print queue</h2><span>Requests are ordered by arrival time</span></div><div className="queue-controls"><div className="search-field"><Search size={17} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by student or document" /><kbd>/</kbd></div><button className="filter-button"><Filter size={16} /> Filter</button></div></div><div className="operator-table"><div className="operator-table-head"><span>Student</span><span>Document</span><span>Print settings</span><span>Arrived</span><span /></div>{filteredJobs.length ? filteredJobs.map((job, index) => <div className="operator-row" key={job.id}><div className="student-cell"><div className="operator-avatar small">PS</div><div><strong>Pushkar Shah</strong><span><b>K7M4P2</b> · {index + 1} of {filteredJobs.length}</span></div></div><div className="operator-file"><FileText size={18} /><strong>{job.name}</strong></div><div><span className="setting-tag">{job.pages} pages</span><span className="setting-tag">{job.color}</span><span className="setting-tag">{job.copies} {job.copies === 1 ? 'copy' : 'copies'}</span></div><span className="arrived">{job.submitted}</span><div className="row-actions"><button className="preview-button" onClick={() => notify(`Previewing ${job.name}`)}>Preview</button><button className="print-button" onClick={() => onComplete(job.id)}><Printer size={15} /> Print</button></div></div>) : <div className="operator-empty"><Search size={22} /><strong>No matching jobs</strong><span>Try another student name, Print Code, or document.</span></div>}</div></section><div className="operator-note"><ShieldCheck size={16} /><span>Student identifiers are private. Use the permanent Print Code to verify each request at the counter.</span></div></main></div>;
 }
 
 createRoot(document.getElementById('root')).render(<App />);
