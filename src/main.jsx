@@ -190,6 +190,114 @@ function mapRemoteJob(job) {
 }
 
 function AuthScreen({ notify, initialError = '' }) {
+  const [portal, setPortal] = useState('student');
+  const [mode, setMode] = useState('login');
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [errorMessage, setErrorMessage] = useState(initialError);
+  const [successMessage, setSuccessMessage] = useState('');
+  const [lastEmail, setLastEmail] = useState('');
+  const isOperator = portal === 'operator';
+
+  const changePortal = (nextPortal) => {
+    setPortal(nextPortal);
+    setMode('login');
+    setErrorMessage('');
+    setSuccessMessage('');
+  };
+
+  const signInWithGoogle = async () => {
+    setBusy(true);
+    setErrorMessage('');
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: window.location.origin },
+    });
+    if (error) {
+      setBusy(false);
+      setErrorMessage(error.message);
+      notify(error.message);
+    }
+  };
+
+  const submit = async (event) => {
+    event.preventDefault();
+    setBusy(true);
+    setErrorMessage('');
+    setSuccessMessage('');
+    setLastEmail(email);
+    try {
+      const result = mode === 'login'
+        ? await supabase.auth.signInWithPassword({ email, password })
+        : await supabase.auth.signUp({ email, password, options: { data: { name } } });
+      if (result.error) {
+        const lowerMessage = result.error.message.toLowerCase();
+        const message = lowerMessage.includes('email not confirmed')
+          ? 'Please confirm your email address first, then try signing in again.'
+          : lowerMessage.includes('invalid login credentials')
+            ? 'Email or password is incorrect. If you just registered, confirm your email first.'
+            : result.error.message;
+        setErrorMessage(message);
+        notify(message);
+      } else if (mode === 'login' && result.data.session) {
+        const currentAccount = await getCurrentAccount();
+        const isStaffAccount = currentAccount?.role === 'operator' || currentAccount?.role === 'admin';
+        if (isOperator !== isStaffAccount) {
+          await signOut();
+          const message = isOperator
+            ? 'This account is not an operator account. Use User login instead.'
+            : 'This is an operator account. Use Operator login instead.';
+          setErrorMessage(message);
+          notify(message);
+        }
+      } else if (mode === 'register') {
+        const message = result.data.session ? 'Account created. Your Print Code is ready.' : 'Account created. Check your email to confirm the account.';
+        setSuccessMessage(message);
+        notify(message);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to contact the authentication service.';
+      setErrorMessage(`Sign-in service error: ${message}`);
+      notify(message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const resendConfirmation = async () => {
+    if (!lastEmail) return;
+    setBusy(true);
+    const { error } = await supabase.auth.resend({ type: 'signup', email: lastEmail });
+    setBusy(false);
+    if (error) setErrorMessage(error.message);
+    else setSuccessMessage(`A new confirmation email was sent to ${lastEmail}.`);
+  };
+
+  return <div className="auth-screen"><div className="auth-card">
+    <div className="auth-brand"><span className="brand-mark"><BookOpen size={19} /></span><span>Library <strong>Print Center</strong></span></div>
+    <div className="auth-role-switch" role="tablist" aria-label="Choose sign-in portal">
+      <button className={portal === 'student' ? 'auth-role-button selected' : 'auth-role-button'} onClick={() => changePortal('student')} role="tab" aria-selected={portal === 'student'}><Home size={15} /> User login</button>
+      <button className={portal === 'operator' ? 'auth-role-button selected' : 'auth-role-button'} onClick={() => changePortal('operator')} role="tab" aria-selected={portal === 'operator'}><ShieldCheck size={15} /> Operator login</button>
+    </div>
+    <p className="eyebrow">{isOperator ? 'Staff access' : 'Private printing, made simple'}</p>
+    <h1>{isOperator ? 'Operator sign in.' : mode === 'login' ? 'Welcome back.' : 'Create your account.'}</h1>
+    <p className="subheading">{isOperator ? 'Sign in to manage the print queue.' : mode === 'login' ? 'Sign in to manage your print requests.' : 'You’ll receive a permanent Print Code after joining.'}</p>
+    {errorMessage && <div className="auth-message error">{errorMessage}{errorMessage.includes('confirm') && <button className="auth-inline-button" onClick={resendConfirmation} disabled={busy}>Resend confirmation email</button>}</div>}
+    {successMessage && <div className="auth-message success">{successMessage}</div>}
+    {mode === 'login' && !isOperator && <><button className="google-button" type="button" onClick={signInWithGoogle} disabled={busy}><span className="google-mark">G</span> Continue with Google</button><div className="auth-divider"><span>or use email</span></div></>}
+    <form onSubmit={submit}>
+      {mode === 'register' && <label>Name<input required value={name} onChange={(event) => setName(event.target.value)} placeholder="Your name" autoComplete="name" /></label>}
+      <label>Email<input required type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" autoComplete="email" /></label>
+      <label>Password<input required minLength="8" type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="At least 8 characters" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} /></label>
+      <button className="primary-button auth-submit" disabled={busy}>{busy ? 'Please wait...' : mode === 'login' ? 'Sign in' : 'Create account'} <ArrowUpRight size={17} /></button>
+    </form>
+    {!isOperator && <button className="auth-switch" onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setErrorMessage(''); setSuccessMessage(''); }}>{mode === 'login' ? 'New here? Create a student account' : 'Already have an account? Sign in'}</button>}
+  </div></div>;
+}
+
+function LegacyAuthScreen({ notify, initialError = '' }) {
   const [mode, setMode] = useState('login');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');

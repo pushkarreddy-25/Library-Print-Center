@@ -280,6 +280,37 @@ body::after {
 	box-shadow: 0 25px 70px rgba(38, 82, 68, .15), inset 0 1px 0 rgba(255, 255, 255, .78);
 }
 
+.auth-role-switch {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 4px;
+	padding: 4px;
+	margin-bottom: 32px;
+	border: 1px solid rgba(255, 255, 255, .8);
+	border-radius: 15px;
+	background: rgba(220, 239, 232, .45);
+}
+
+.auth-role-button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 7px;
+	min-height: 36px;
+	border: 0;
+	border-radius: 11px;
+	color: var(--muted);
+	background: transparent;
+	font-size: 11px;
+	font-weight: 700;
+}
+
+.auth-role-button.selected {
+	color: var(--green);
+	background: rgba(255, 255, 255, .82);
+	box-shadow: 0 3px 10px rgba(58, 95, 79, .1);
+}
+
 .auth-card input {
 	height: 46px;
 	border: 1px solid rgba(255, 255, 255, .85);
