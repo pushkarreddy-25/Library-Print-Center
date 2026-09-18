@@ -76,7 +76,23 @@ function App() {
       }
       try {
         const currentAccount = await getCurrentAccount();
-        const remoteJobs = await getJobs({ accountId: activeSession.user.id, staff: currentAccount?.role !== 'student' });
+        const isStaffAccount = currentAccount?.role === 'operator' || currentAccount?.role === 'admin';
+        const requestedPortal = sessionStorage.getItem('print-center-auth-portal');
+        if (requestedPortal && ((requestedPortal === 'operator') !== isStaffAccount)) {
+          sessionStorage.removeItem('print-center-auth-portal');
+          await supabase.auth.signOut();
+          if (mounted) {
+            setAccount(null);
+            setJobs([]);
+            setAccountError(requestedPortal === 'operator'
+              ? 'This Google account is not an operator account. Promote its profile to operator/admin before using Operator login.'
+              : 'This is an operator account. Use Operator login.');
+            setLoadingAccount(false);
+          }
+          return;
+        }
+        sessionStorage.removeItem('print-center-auth-portal');
+        const remoteJobs = await getJobs({ accountId: activeSession.user.id, staff: isStaffAccount });
         if (mounted) {
           setAccount(currentAccount);
           setJobs(remoteJobs.map(mapRemoteJob));
@@ -248,6 +264,7 @@ function AuthScreen({ notify, initialError = '' }) {
   const signInWithGoogle = async () => {
     setBusy(true);
     setErrorMessage('');
+    sessionStorage.setItem('print-center-auth-portal', portal);
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: { redirectTo: window.location.origin },
@@ -265,6 +282,7 @@ function AuthScreen({ notify, initialError = '' }) {
     setErrorMessage('');
     setSuccessMessage('');
     setLastEmail(email);
+    sessionStorage.setItem('print-center-auth-portal', portal);
     try {
       const result = mode === 'login'
         ? await supabase.auth.signInWithPassword({ email, password })
