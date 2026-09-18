@@ -323,7 +323,7 @@ function AuthScreen({ notify, initialError = '' }) {
     <p className="subheading">{isOperator ? 'Sign in to manage the print queue.' : mode === 'login' ? 'Sign in to manage your print requests.' : 'You’ll receive a permanent Print Code after joining.'}</p>
     {errorMessage && <div className="auth-message error">{errorMessage}{errorMessage.includes('confirm') && <button className="auth-inline-button" onClick={resendConfirmation} disabled={busy}>Resend confirmation email</button>}</div>}
     {successMessage && <div className="auth-message success">{successMessage}</div>}
-    {mode === 'login' && !isOperator && <><button className="google-button" type="button" onClick={signInWithGoogle} disabled={busy}><span className="google-mark">G</span> Continue with Google</button><div className="auth-divider"><span>or use email</span></div></>}
+    {mode === 'login' && <><button className="google-button" type="button" onClick={signInWithGoogle} disabled={busy}><span className="google-mark">G</span> Continue with Google</button><div className="auth-divider"><span>or use email</span></div></>}
     <form onSubmit={submit}>
       {mode === 'register' && <label>Name<input required value={name} onChange={(event) => setName(event.target.value)} placeholder="Your name" autoComplete="name" /></label>}
       <label>Email<input required type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" autoComplete="email" /></label>
